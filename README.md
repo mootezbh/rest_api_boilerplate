@@ -13,7 +13,7 @@ inspired and updated from [TomDoesTech](https://github.com/TomDoesTech/auth-api-
 7. Access token
 8. Refresh tokens
 
-## What technology are we using?
+## What technology are used?
 
 - [TypeScript](https://www.typescriptlang.org/) - Static type checking
 - [Express](https://expressjs.com/) - Web server
