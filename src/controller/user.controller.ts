@@ -1,5 +1,6 @@
-import { Request, Response } from "express";
+import { RequestHandler } from "express";
 import { nanoid } from "nanoid";
+import { sendError } from "../helpers/sendErrors";
 import {
   CreateUserInput,
   ForgotPasswordInput,
@@ -14,10 +15,11 @@ import {
 import log from "../utils/logger";
 import sendEmail from "../utils/mailer";
 
-export async function createUserHandler(
-  req: Request<{}, {}, CreateUserInput>,
-  res: Response
-) {
+export const createUserHandler: RequestHandler<
+  {},
+  {},
+  CreateUserInput
+> = async (req, res) => {
   const body = req.body;
 
   try {
@@ -30,71 +32,65 @@ export async function createUserHandler(
       text: `verification code: ${user.verificationCode}. Id: ${user._id}`,
     });
 
-    return res.send("User successfully created");
+    res.send("User successfully created");
   } catch (e: any) {
     if (e.code === 11000) {
-      return res.status(409).send("Account already exists");
+      return sendError(res, 409, "Account already exists");
     }
-
-    return res.status(500).send(e);
+    return sendError(res, 500, e.message);
   }
-}
+};
 
-export async function verifyUserHandler(
-  req: Request<VerifyUserInput>,
-  res: Response
-) {
+export const verifyUserHandler: RequestHandler<VerifyUserInput> = async (
+  req,
+  res
+) => {
   const id = req.params.id;
   const verificationCode = req.params.verificationCode;
 
-  // find the user by id
   const user = await findUserById(id);
 
   if (!user) {
-    return res.send("Could not verify user");
+    return sendError(res, 404, "Could not verify user");
   }
 
-  // check to see if they are already verified
   if (user.verified) {
-    return res.send("User is already verified");
+    return sendError(res, 400, "User is already verified");
   }
 
-  // check to see if the verificationCode matches
   if (user.verificationCode === verificationCode) {
     user.verified = true;
-
     await user.save();
-
-    return res.send("User successfully verified");
+    res.send("User successfully verified");
+    return;
   }
 
-  return res.send("Could not verify user");
-}
+  return sendError(res, 400, "Could not verify user");
+};
 
-export async function forgotPasswordHandler(
-  req: Request<{}, {}, ForgotPasswordInput>,
-  res: Response
-) {
+export const forgotPasswordHandler: RequestHandler<
+  {},
+  {},
+  ForgotPasswordInput
+> = async (req, res) => {
   const message =
     "If a user with that email is registered you will receive a password reset email";
 
   const { email } = req.body;
-
   const user = await findUserByEmail(email);
 
   if (!user) {
     log.debug(`User with email ${email} does not exists`);
-    return res.send(message);
+    res.send(message);
+    return;
   }
 
   if (!user.verified) {
-    return res.send("User is not verified");
+    return sendError(res, 400, "User is not verified");
   }
 
   const passwordResetCode = nanoid();
-
   user.passwordResetCode = passwordResetCode;
-
   await user.save();
 
   await sendEmail({
@@ -105,16 +101,15 @@ export async function forgotPasswordHandler(
   });
 
   log.debug(`Password reset email sent to ${email}`);
+  res.send(message);
+};
 
-  return res.send(message);
-}
-
-export async function resetPasswordHandler(
-  req: Request<ResetPasswordInput["params"], {}, ResetPasswordInput["body"]>,
-  res: Response
-) {
+export const resetPasswordHandler: RequestHandler<
+  ResetPasswordInput["params"],
+  {},
+  ResetPasswordInput["body"]
+> = async (req, res) => {
   const { id, passwordResetCode } = req.params;
-
   const { password } = req.body;
 
   const user = await findUserById(id);
@@ -124,18 +119,16 @@ export async function resetPasswordHandler(
     !user.passwordResetCode ||
     user.passwordResetCode !== passwordResetCode
   ) {
-    return res.status(400).send("Could not reset user password");
+    return sendError(res, 400, "Could not reset user password");
   }
 
   user.passwordResetCode = null;
-
   user.password = password;
-
   await user.save();
 
-  return res.send("Successfully updated password");
-}
+  res.send("Successfully updated password");
+};
 
-export async function getCurrentUserHandler(req: Request, res: Response) {
-  return res.send(res.locals.user);
-}
+export const getCurrentUserHandler: RequestHandler = async (req, res) => {
+  res.send(res.locals.user);
+};
